@@ -1,62 +1,76 @@
 #!/bin/bash
 
-# mygrep.sh - A simple grep-like script
-
-# Function to show usage
+# Function to show usage information
 usage() {
     echo "Usage: $0 [-n] [-v] search_string filename"
     echo "Options:"
-    echo "  -n   Show line numbers"
-    echo "  -v   Invert match (show non-matching lines)"
-    echo "  --help  Show this help message"
+    echo "  -n    Show line numbers"
+    echo "  -v    Invert match (show non-matching lines)"
+    echo "  --help Show this help message"
     exit 1
 }
 
 # Check if no arguments or --help is passed
-if [[ $# -lt 1 || $1 == "--help" ]]; then
+if [ "$#" -lt 1 ]; then
     usage
 fi
 
-# Initialize options
+if [ "$1" == "--help" ]; then
+    usage
+fi
+
+# Initialize option flags
 show_line_numbers=false
 invert_match=false
 
-# Parse options
-while [[ "$1" =~ ^- ]]; do
-    case "$1" in
-        *n*) show_line_numbers=true ;;
-        *v*) invert_match=true ;;
-        --help) usage ;;
-        *) echo "Invalid option: $1"; usage ;;
+# Parse options using getopts
+while getopts ":nv" opt; do
+    case $opt in
+        n) show_line_numbers=true ;;
+        v) invert_match=true ;;
+        \?) echo "Invalid option: -$OPTARG" >&2; usage ;;
     esac
-    shift
 done
 
-# Now $1 should be search string and $2 should be filename
-search_string="$1"
-file="$2"
+# Shift parsed options
+shift $((OPTIND-1))
 
-# Validate input
-if [[ -z "$search_string" || -z "$file" ]]; then
+# Check for remaining arguments: search_string and filename
+if [ $# -lt 2 ]; then
     echo "Error: Missing search string or filename."
     usage
 fi
 
-if [[ ! -f "$file" ]]; then
-    echo "Error: File '$file' not found."
+search_string="$1"
+filename="$2"
+
+# Check if file exists
+if [ ! -f "$filename" ]; then
+    echo "Error: File '$filename' not found."
     exit 1
 fi
 
-# Build the grep command
-grep_command="grep -i"
+# Read file line by line
+line_number=0
+while IFS= read -r line; do
+    line_number=$((line_number+1))
+    
+    # Perform case-insensitive matching
+    if echo "$line" | grep -iq -- "$search_string"; then
+        match=true
+    else
+        match=false
+    fi
 
-if $invert_match; then
-    grep_command="$grep_command -v"
-fi
+    # Decide whether to print the line based on invert_match
+    if { [ "$match" = true ] && [ "$invert_match" = false ]; } || \
+       { [ "$match" = false ] && [ "$invert_match" = true ]; }; then
+       
+        if [ "$show_line_numbers" = true ]; then
+            printf "%d:%s\n" "$line_number" "$line"
+        else
+            printf "%s\n" "$line"
+        fi
+    fi
 
-if $show_line_numbers; then
-    grep_command="$grep_command -n"
-fi
-
-# Execute the grep command
-$grep_command -- "$search_string" "$file"
+done < "$filename"
